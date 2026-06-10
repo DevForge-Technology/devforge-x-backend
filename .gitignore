@@ -1,0 +1,29 @@
+# compiled output
+/dist
+/node_modules
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# dependency directories
+node_modules/
+
+# env files
+.env
+.env.local
+.env.production
+.env.development
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# TS build info
+*.tsbuildinfo
+

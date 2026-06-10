@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  vendor
+}
+
+enum CompanyStatus {
+  active
+  inactive
+}
+
+model User {
+  id                 String          @id @default(auto()) @map("_id") @db.ObjectId
+  supabaseId         String          @unique
+  name               String
+  email              String          @unique
+  role               Role            @default(vendor)
+  defaultCompany     Company?        @relation("DefaultCompany", fields: [defaultCompanyId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  defaultCompanyId   String?         @db.ObjectId
+  lastUsedCompany    Company?        @relation("LastUsedCompany", fields: [lastUsedCompanyId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  lastUsedCompanyId  String?         @db.ObjectId
+  companies          CompanyVendor[]
+  referrals          Referral[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model Company {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  logo        String?
+  accentColor String?
+  status      CompanyStatus   @default(active)
+  vendors     CompanyVendor[]
+  referrals   Referral[]
+  defaultFor  User[]          @relation("DefaultCompany")
+  lastUsedFor User[]          @relation("LastUsedCompany")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model CompanyVendor {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  vendor    User     @relation(fields: [vendorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vendorId  String   @db.ObjectId
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companyId String   @db.ObjectId
+  createdAt DateTime @default(now())
+
+  @@unique([vendorId, companyId])
+  @@index([vendorId])
+  @@index([companyId])
+}
+
+model Referral {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  email          String
+  productInfo    String
+  referenceLinks String[]
+  hostName       String
+  hostEmail      String
+  vendor         User     @relation(fields: [vendorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vendorId       String   @db.ObjectId
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companyId      String   @db.ObjectId
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([vendorId])
+  @@index([companyId])
+  @@index([vendorId, companyId])
+}
