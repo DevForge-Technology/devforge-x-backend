@@ -37,9 +37,9 @@ export class UpdateMeDto {
 }
 
 export class ChangePasswordDto {
+  @IsOptional()
   @IsString()
-  @MinLength(6)
-  currentPassword!: string;
+  currentPassword?: string;
 
   @IsString()
   @MinLength(6)
