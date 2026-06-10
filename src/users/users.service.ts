@@ -248,6 +248,29 @@ export class UsersService {
 
     if (!user) throw new NotFoundException('User not found');
     const { data: authData } = await this.supabase.getAuthUser(user.supabaseId);
+
+    // Auto-heal lastUsedCompanyId if not set but companies exist
+    let lastUsedCompanyId = user.lastUsedCompanyId;
+    if (!lastUsedCompanyId && user.companies.length > 0) {
+      lastUsedCompanyId = user.companies[0].id;
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { lastUsedCompanyId, defaultCompanyId: lastUsedCompanyId },
+      });
+      user.lastUsedCompanyId = lastUsedCompanyId;
+    }
+
+    // Sync to Supabase user metadata if not matching
+    const sbLastUsed = authData.user?.user_metadata?.last_used_company_id;
+    if (user.lastUsedCompanyId && sbLastUsed !== user.lastUsedCompanyId) {
+      await this.supabase.syncUserMetadata(user.supabaseId, {
+        name: user.name,
+        role: user.role,
+        last_used_company_id: user.lastUsedCompanyId,
+        must_change_password: authData.user?.user_metadata?.must_change_password === true,
+      });
+    }
+
     const mustChangePassword = authData.user?.user_metadata?.must_change_password === true;
 
     return {
