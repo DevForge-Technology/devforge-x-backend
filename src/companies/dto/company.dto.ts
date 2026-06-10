@@ -22,9 +22,9 @@ export class CreateCompanyDto {
   status?: CompanyStatus;
 
   @IsOptional()
-  @IsArray()
-  @IsMongoId({ each: true })
-  vendorIds?: string[];
+  @IsString()
+  @IsMongoId()
+  vendorId?: string;
 }
 
 export class UpdateCompanyDto extends CreateCompanyDto {}

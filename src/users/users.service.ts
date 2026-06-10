@@ -44,7 +44,7 @@ export class UsersService {
       this.prisma.user.findMany({
         where,
         include: {
-          companies: { include: { company: true } },
+          companies: true,
           _count: { select: { companies: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -62,7 +62,7 @@ export class UsersService {
         email: u.email,
         role: u.role,
         companyCount: u._count.companies,
-        assignedCompanies: u.companies.map((cv) => cv.company),
+        assignedCompanies: u.companies,
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
       })),
@@ -76,7 +76,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        companies: { include: { company: true } },
+        companies: true,
       },
     });
 
@@ -84,7 +84,7 @@ export class UsersService {
 
     return {
       ...user,
-      assignedCompanies: user.companies.map((cv) => cv.company),
+      assignedCompanies: user.companies,
       companies: undefined,
     };
   }
@@ -128,8 +128,9 @@ export class UsersService {
 
       if (companyIds.length > 0) {
         const uniqueCompanyIds = Array.from(new Set(companyIds));
-        await this.prisma.companyVendor.createMany({
-          data: uniqueCompanyIds.map((companyId) => ({ companyId, vendorId: createdUser.id })),
+        await this.prisma.company.updateMany({
+          where: { id: { in: uniqueCompanyIds } },
+          data: { vendorId: createdUser.id },
         });
       }
 
@@ -171,11 +172,17 @@ export class UsersService {
     });
 
     if (dto.companyIds !== undefined) {
-      await this.prisma.companyVendor.deleteMany({ where: { vendorId: id } });
+      // Disassociate all companies currently assigned to this vendor
+      await this.prisma.company.updateMany({
+        where: { vendorId: id },
+        data: { vendorId: null },
+      });
+      // Associate new ones
       if (dto.companyIds.length > 0) {
         const uniqueCompanyIds = Array.from(new Set(dto.companyIds));
-        await this.prisma.companyVendor.createMany({
-          data: uniqueCompanyIds.map((companyId) => ({ companyId, vendorId: id })),
+        await this.prisma.company.updateMany({
+          where: { id: { in: uniqueCompanyIds } },
+          data: { vendorId: id },
         });
       }
     }
@@ -195,7 +202,11 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user || user.role !== Role.vendor) throw new NotFoundException('Vendor not found');
 
-    await this.prisma.companyVendor.deleteMany({ where: { vendorId: id } });
+    // Disassociate companies assigned to this vendor
+    await this.prisma.company.updateMany({
+      where: { vendorId: id },
+      data: { vendorId: null },
+    });
     await this.prisma.user.delete({ where: { id } });
 
     const { error } = await this.supabase.deleteAuthUser(user.supabaseId);
@@ -231,7 +242,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        companies: { include: { company: true } },
+        companies: true,
       },
     });
 
@@ -242,7 +253,7 @@ export class UsersService {
     return {
       ...user,
       mustChangePassword,
-      assignedCompanies: user.companies.map((cv) => cv.company),
+      assignedCompanies: user.companies,
       companies: undefined,
     };
   }

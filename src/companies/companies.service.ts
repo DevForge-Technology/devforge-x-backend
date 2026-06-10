@@ -18,7 +18,7 @@ export class CompaniesService {
     const [companies, total] = await Promise.all([
       this.prisma.company.findMany({
         where,
-        include: { _count: { select: { vendors: true } } },
+        include: { vendor: true },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -29,8 +29,8 @@ export class CompaniesService {
     return {
       companies: companies.map((c) => ({
         ...c,
-        vendorCount: c._count.vendors,
-        _count: undefined,
+        vendorCount: c.vendorId ? 1 : 0,
+        assignedVendors: c.vendor ? [c.vendor] : [],
       })),
       total,
       page,
@@ -42,7 +42,7 @@ export class CompaniesService {
     const company = await this.prisma.company.findUnique({
       where: { id },
       include: {
-        vendors: { include: { vendor: true } },
+        vendor: true,
       },
     });
 
@@ -50,8 +50,7 @@ export class CompaniesService {
 
     return {
       ...company,
-      assignedVendors: company.vendors.map((cv) => cv.vendor),
-      vendors: undefined,
+      assignedVendors: company.vendor ? [company.vendor] : [],
     };
   }
 
@@ -63,77 +62,69 @@ export class CompaniesService {
         logo: dto.logo,
         accentColor: dto.accentColor,
         status: dto.status,
+        vendorId: dto.vendorId || null,
       },
     });
-
-    if (dto.vendorIds?.length) {
-      await this.prisma.companyVendor.createMany({
-        data: dto.vendorIds.map((vendorId) => ({ companyId: company.id, vendorId })),
-      });
-    }
 
     return { company };
   }
 
   async update(id: string, dto: UpdateCompanyDto) {
+    const data: any = {
+      name: dto.name,
+      description: dto.description,
+      logo: dto.logo,
+      accentColor: dto.accentColor,
+      status: dto.status,
+    };
+
+    if (dto.vendorId !== undefined) {
+      data.vendorId = dto.vendorId || null;
+    }
+
     const company = await this.prisma.company.update({
       where: { id },
-      data: {
-        name: dto.name,
-        description: dto.description,
-        logo: dto.logo,
-        accentColor: dto.accentColor,
-        status: dto.status,
-      },
+      data,
     });
-
-    if (dto.vendorIds !== undefined) {
-      await this.prisma.companyVendor.deleteMany({ where: { companyId: id } });
-      if (dto.vendorIds.length > 0) {
-        await this.prisma.companyVendor.createMany({
-          data: dto.vendorIds.map((vendorId) => ({ companyId: id, vendorId })),
-        });
-      }
-    }
 
     return { company };
   }
 
   async delete(id: string) {
-    await this.prisma.companyVendor.deleteMany({ where: { companyId: id } });
     await this.prisma.company.delete({ where: { id } });
     return { success: true };
   }
 
   async assignVendor(companyId: string, vendorId: string) {
-    await this.prisma.companyVendor.create({
-      data: { companyId, vendorId },
+    await this.prisma.company.update({
+      where: { id: companyId },
+      data: { vendorId },
     });
     return { success: true };
   }
 
   async unassignVendor(companyId: string, vendorId: string) {
-    await this.prisma.companyVendor.deleteMany({
-      where: { companyId, vendorId },
+    await this.prisma.company.updateMany({
+      where: { id: companyId, vendorId },
+      data: { vendorId: null },
     });
     return { success: true };
   }
 
   async getMine(vendorId: string) {
-    const assignments = await this.prisma.companyVendor.findMany({
+    const companies = await this.prisma.company.findMany({
       where: { vendorId },
-      include: { company: true },
     });
 
-    return { companies: assignments.map((a) => a.company) };
+    return { companies };
   }
 
   async updateWorkspace(userId: string, supabaseId: string, companyId: string) {
-    const assignment = await this.prisma.companyVendor.findFirst({
-      where: { vendorId: userId, companyId },
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, vendorId: userId },
     });
 
-    if (!assignment) {
+    if (!company) {
       throw new NotFoundException('Company not assigned to vendor');
     }
 
