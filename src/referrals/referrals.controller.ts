@@ -51,7 +51,7 @@ export class ReferralsController {
   }
 
   @Post()
-  @Roles(Role.vendor)
+  @Roles(Role.vendor,Role.admin)
   create(@CurrentUser() user: User, @Body() dto: CreateReferralDto) {
     return this.referralsService.create(user.id, user.lastUsedCompanyId, dto);
   }

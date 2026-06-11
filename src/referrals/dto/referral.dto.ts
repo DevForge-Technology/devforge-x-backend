@@ -15,11 +15,13 @@ export class CreateReferralDto {
   @IsString({ each: true })
   referenceLinks?: string[];
 
+  @IsOptional()
   @IsString()
-  hostName!: string;
+  hostName?: string;
 
+  @IsOptional()
   @IsEmail()
-  hostEmail!: string;
+  hostEmail?: string;
 
   @IsOptional()
   @IsMongoId()

@@ -83,7 +83,7 @@ export class ReferralsService {
     if (!referral) throw new NotFoundException('Referral not found');
 
     if (role === Role.vendor && referral.vendorId !== userId) {
-      throw new ForbiddenException('Forbidden');
+      throw new ForbiddenException('You do not have permission to view this referral');
     }
 
     return {
@@ -122,7 +122,7 @@ export class ReferralsService {
     if (!existing) throw new NotFoundException('Referral not found');
 
     if (role === Role.vendor && existing.vendorId !== userId) {
-      throw new ForbiddenException('Forbidden');
+      throw new ForbiddenException('You do not have permission to update this referral');
     }
 
     const referral = await this.prisma.referral.update({
@@ -138,7 +138,7 @@ export class ReferralsService {
     if (!existing) throw new NotFoundException('Referral not found');
 
     if (role === Role.vendor && existing.vendorId !== userId) {
-      throw new ForbiddenException('Forbidden');
+      throw new ForbiddenException('You do not have permission to delete this referral');
     }
 
     await this.prisma.referral.delete({ where: { id } });
