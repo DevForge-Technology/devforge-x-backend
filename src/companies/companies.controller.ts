@@ -9,8 +9,10 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { Role } from '@prisma/client';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -89,5 +91,19 @@ export class CompaniesController {
   @Roles(Role.admin)
   unassign(@Param('id') id: string, @Param('vendorId') vendorId: string) {
     return this.companiesService.unassignVendor(id, vendorId);
+  }
+  @Post(':id/generate-nda')
+  @Roles(Role.admin)
+  async generateNda(@Param('id') id: string, @Res() res: Response) {
+    const pdfStream = await this.companiesService.generateNdaPdf(id);
+
+    // Set headers explicitly to tell the browser it's a binary PDF download
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=NDA_${id}.pdf`,
+    });
+
+    // Pipe the readable stream directly into the express response network pipeline
+    pdfStream.pipe(res);
   }
 }

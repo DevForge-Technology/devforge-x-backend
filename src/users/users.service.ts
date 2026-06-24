@@ -60,6 +60,7 @@ export class UsersService {
         supabaseId: u.supabaseId,
         name: u.name,
         email: u.email,
+        designation: u.designation,
         role: u.role,
         companyCount: u._count.companies,
         assignedCompanies: u.companies,
@@ -119,6 +120,7 @@ export class UsersService {
           supabaseId: authData.user.id,
           name: dto.name,
           email: dto.email,
+          designation: dto.designation,
           role: Role.vendor,
           defaultCompanyId: firstCompanyId,
           lastUsedCompanyId: firstCompanyId,
@@ -162,6 +164,7 @@ export class UsersService {
       data: {
         name: dto.name,
         email: dto.email,
+        designation: dto.designation,
         ...(dto.companyIds
           ? {
               defaultCompanyId: dto.companyIds[0] ?? null,
