@@ -157,7 +157,8 @@ export class CompaniesService {
     // Dynamic document properties
     const clientName = company.name || '[Client Company Name]';
     const clientAddress = company.description || '[Client Address]';
-    const vendorName = company.vendor?.name || '[Authorized Signatory Name & Designation]';
+    const designation = company.vendor?.designation || '[Designation]';
+    const vendorName = company.vendor?.name || '[Authorized Signatory Name]';
     const effectiveDate = new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: '2-digit',
@@ -339,7 +340,7 @@ bodyStyle().text(
 );
 
 boldBodyStyle().text(
-  `${vendorName}`,
+  `${vendorName}, ${designation}`,
   { continued: true },
 );
 
@@ -509,7 +510,7 @@ bodyStyle().text(
     signatureBoldStyle().text(`For ${clientName}`, 330, signatureY);
     doc.moveDown(0.5);
     signatureStyle().text(`Name: ${vendorName}`, 330);
-    signatureStyle().text('Designation: Authorized Signatory', 330);
+    signatureStyle().text(`Designation: ${designation}`, 330);
     signatureStyle().text('Signature: ', 330);
     signatureStyle().text('Date: ', 330);
 const range = doc.bufferedPageRange();

@@ -7,6 +7,9 @@ export class CreateUserDto {
   @IsEmail()
   email!: string;
 
+  @IsString()
+  designation!: string;
+
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -21,6 +24,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  designation?: string;
 
   @IsOptional()
   @IsArray()
