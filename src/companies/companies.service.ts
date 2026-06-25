@@ -655,10 +655,10 @@ doc.strokeColor(lineColor)
   .lineTo(leftX + cardWidth, leftY)
   .stroke();
 
-doc.font('Inter')
+doc.font('InterBold')
   .fillColor('#000000')
   .fontSize(7.5)
-  .text('Vikram Modh', leftX + 5, leftY - 12);
+  .text('Vikram Modh', leftX, leftY - 12);
 
 leftY += 18;
 doc.fillColor('#8a8a8a')
@@ -673,10 +673,10 @@ doc.strokeColor(lineColor)
   .lineTo(leftX + cardWidth, leftY)
   .stroke();
 
-doc.font('Inter')
+doc.font('InterBold')
   .fillColor('#000000')
   .fontSize(7.5)
-  .text('Founder & CEO', leftX + 5, leftY - 12);
+  .text('Founder & CEO', leftX, leftY - 12);
 
 leftY += 18;
 doc.fillColor('#8a8a8a')
@@ -691,10 +691,10 @@ doc.strokeColor(lineColor)
   .lineTo(leftX + cardWidth, leftY)
   .stroke();
 
-doc.font('Inter')
+doc.font('InterBold')
   .fillColor('#000000')
   .fontSize(7.5)
-  .text(`${effectiveDate}`, leftX + 5, leftY - 12);
+  .text(`${effectiveDate}`, leftX, leftY - 12);
 
 doc.rect(rightX, signatureStartY, cardWidth, titleHeight)
   .fill(headerColor);
