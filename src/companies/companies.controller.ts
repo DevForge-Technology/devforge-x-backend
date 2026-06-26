@@ -21,7 +21,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { CompaniesService } from './companies.service';
-import { AssignVendorDto, CreateCompanyDto, UpdateCompanyDto, UpdateWorkspaceDto } from './dto/company.dto';
+import { AssignVendorDto, CreateCompanyDto, UpdateCompanyDto, UpdateWorkspaceDto, SendNdaDto } from './dto/company.dto';
 
 @Controller('companies')
 @UseGuards(AuthGuard, RolesGuard)
@@ -94,25 +94,28 @@ export class CompaniesController {
     return this.companiesService.unassignVendor(id, vendorId);
   }
  @Post(':id/generate-nda')
-  @Roles(Role.admin)
-  async generateNda(
-    @Param('id') id: string,
-    @Body() body: { customEmail: string; templateId: string }, // 👈 Reads custom frontend values
-    @Res() res: Response,
-  ) {
-    const pdfStream = await this.companiesService.generateNdaPdf(id);
+@Roles(Role.admin)
+async generateNda(
+  @Param('id') id: string,
+  @Body() dto: SendNdaDto,
+  @Res() res: Response,
+) {
+  const pdfStream = await this.companiesService.generateNdaPdf(
+    id,
+    dto.email,
+    dto.message,
+  );
 
-    // Set headers explicitly to tell the browser it's a binary PDF download
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=NDA_${id}.pdf`,
-    });
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename=NDA_${id}.pdf`,
+  });
 
     // Pipe the readable stream directly into the express response network pipeline
     pdfStream.pipe(res);
 
     // Pass the custom email address and selected template style into the background sender
-    this.companiesService.sendNda(id, body.customEmail, body.templateId).catch((err) => {
+    this.companiesService.sendNda(id, dto.email, dto.message).catch((err) => {
       console.error('Background NDA Email Delivery Failed:', err);
     });
   }

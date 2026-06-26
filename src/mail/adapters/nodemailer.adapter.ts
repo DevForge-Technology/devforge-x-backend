@@ -16,10 +16,8 @@ export class NodemailerMailAdapter implements MailService {
   }
   async sendNdaEmail(
   to: string,
-  vendorName: string,
-  companyName: string,
+  message: string,
   pdfBuffer: Buffer,
-  templateId?: string,
 ): Promise<void> {
   this.logger.warn(`NDA email would be sent to ${to}`);
 }

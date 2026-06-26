@@ -14,12 +14,10 @@ export interface MailService {
   ): Promise<void>;
 
  sendNdaEmail(
-    to: string,
-    vendorName: string,
-    companyName: string,
-    pdfBuffer: Buffer,
-    templateId?: string,
-  ): Promise<void>;
+  to: string,
+  message: string,
+  pdfBuffer: Buffer,
+): Promise<void>;
 }
 export const MAIL_SERVICE = 'MAIL_SERVICE';
 

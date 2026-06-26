@@ -147,7 +147,11 @@ export class CompaniesService {
     return { user };
   }
 
-  async generateNdaPdf(companyId: string): Promise<NodeJS.ReadableStream> {
+  async generateNdaPdf(
+  companyId: string,
+  email?: string,
+  message?: string,
+): Promise<NodeJS.ReadableStream> {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       include: { vendor: true },
@@ -794,7 +798,11 @@ doc.x = 55;
     doc.end();
     return doc;
   }
- async sendNda(companyId: string, customEmail?: string, templateId?: string) {
+ async sendNda(
+  companyId: string,
+  email: string,
+  message: string,
+) {
     console.log('SEND NDA WORKFLOW INITIATED');
 
     const company = await this.prisma.company.findUnique({
@@ -805,20 +813,20 @@ doc.x = 55;
     if (!company) {
       throw new NotFoundException('Company profile target context not located.');
     }
-
-    // 🎯 Use the user-verified email from the modal, fallback to db row record if empty
-    const targetRecipientEmail = customEmail || company.vendor?.email;
+const targetRecipientEmail = email || company.vendor?.email;
 
     if (!targetRecipientEmail) {
       throw new BadRequestException('Cannot distribute NDA agreement. Recipient destination address missing.');
     }
 
-    // 👇 EXTRACT VALUES INTO LOCAL CONSTANTS BEFORE THE PROMISE CLOSURE
-    // This removes the reliance on the nested 'company.vendor' typing!
     const vendorName = company.vendor?.name || 'Vendor Team';
     const companyName = company.name;
 
-    const pdfDoc = await this.generateNdaPdf(companyId);
+    const pdfDoc = await this.generateNdaPdf(
+  companyId,
+  targetRecipientEmail,
+  message,
+);
     const chunks: Buffer[] = [];
 
     return new Promise<{ success: boolean }>((resolve, reject) => {
@@ -827,17 +835,14 @@ doc.x = 55;
 
       pdfDoc.on('end', () => {
         const pdfBuffer = Buffer.concat(chunks);
-        
-        // ✅ USE THE CONSTANTS HERE — The red lines will be completely gone!
+    
         console.log('Dispatching dynamic template agreement to destination:', targetRecipientEmail);
 
         this.mailService.sendNdaEmail(
-          targetRecipientEmail,
-          vendorName,
-          companyName,
-          pdfBuffer,
-          templateId, 
-        )
+  targetRecipientEmail,
+  message,
+  pdfBuffer,
+)
         .then(() => {
           console.log('NDA TEMPLATE DISTRIBUTED SUCCESSFULLY');
           resolve({ success: true });

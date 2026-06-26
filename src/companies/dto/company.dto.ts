@@ -1,5 +1,5 @@
 import { CompanyStatus } from '@prisma/client';
-import { IsArray, IsEnum, IsOptional, IsString, IsMongoId } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString, IsMongoId, IsEmail } from 'class-validator';
 
 export class CreateCompanyDto {
   @IsString()
@@ -37,4 +37,12 @@ export class AssignVendorDto {
 export class UpdateWorkspaceDto {
   @IsMongoId()
   companyId!: string;
+}
+
+export class SendNdaDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  message!: string;
 }
