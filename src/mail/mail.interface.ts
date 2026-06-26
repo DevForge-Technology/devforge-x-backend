@@ -22,3 +22,5 @@ export interface MailService {
   ): Promise<void>;
 }
 export const MAIL_SERVICE = 'MAIL_SERVICE';
+
+
