@@ -11,6 +11,7 @@ import {
   Req,
   Res,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Role } from '@prisma/client';
@@ -92,9 +93,13 @@ export class CompaniesController {
   unassign(@Param('id') id: string, @Param('vendorId') vendorId: string) {
     return this.companiesService.unassignVendor(id, vendorId);
   }
-  @Post(':id/generate-nda')
+ @Post(':id/generate-nda')
   @Roles(Role.admin)
-  async generateNda(@Param('id') id: string, @Res() res: Response) {
+  async generateNda(
+    @Param('id') id: string,
+    @Body() body: { customEmail: string; templateId: string }, // 👈 Reads custom frontend values
+    @Res() res: Response,
+  ) {
     const pdfStream = await this.companiesService.generateNdaPdf(id);
 
     // Set headers explicitly to tell the browser it's a binary PDF download
@@ -104,6 +109,36 @@ export class CompaniesController {
     });
 
     // Pipe the readable stream directly into the express response network pipeline
+    pdfStream.pipe(res);
+
+    // Pass the custom email address and selected template style into the background sender
+    this.companiesService.sendNda(id, body.customEmail, body.templateId).catch((err) => {
+      console.error('Background NDA Email Delivery Failed:', err);
+    });
+  }
+  @Post(':id/save-nda-url')
+  async saveNdaUrl(
+    @Param('id') id: string,
+    @Body() body: { documentUrl: string },
+  ) {
+    if (!body.documentUrl) {
+      throw new BadRequestException('Document payload parameter source is missing.');
+    }
+    
+    return await this.companiesService.saveNdaUrl(id, body.documentUrl);
+  }
+  @Get(':id/download-nda')
+  async downloadNda(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdfStream = await this.companiesService.generateNdaPdf(id);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=NDA_Executed_${id}.pdf`,
+    });
+
     pdfStream.pipe(res);
   }
 }

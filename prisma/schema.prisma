@@ -41,6 +41,8 @@ model Company {
   logo        String?
   accentColor String?
   status      CompanyStatus   @default(active)
+  ndaUrl      String?         
+  ndaStatus   String?         @default("pending")
   vendorId    String?         @db.ObjectId
   vendor      User?           @relation("VendorCompanies", fields: [vendorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   referrals   Referral[]

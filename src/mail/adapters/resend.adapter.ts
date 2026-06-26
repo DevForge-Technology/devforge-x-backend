@@ -46,4 +46,47 @@ export class ResendMailAdapter implements MailService {
       throw error;
     }
   }
+  async sendNdaEmail(
+    to: string,
+    vendorName: string,
+    companyName: string,
+    pdfBuffer: Buffer,
+    templateId?: string, 
+  ): Promise<void> {
+    try {
+      let htmlContent = `
+        <p>Dear ${vendorName || 'Vendor Team'},</p>
+        <p>Please find attached the Mutual Non-Disclosure Agreement (NDA) for <strong>${companyName}</strong> for your professional review and electronic signature.</p>
+        <p>Kind Regards,</p>
+        <p><strong>DevForge Technology</strong></p>
+      `;
+
+      if (templateId === 'friendly_casual') {
+        htmlContent = `
+          <p>Hi ${vendorName || 'Team'}! </p>
+          <p>Excited to kick things off together. We've compiled the NDA for <strong>${companyName}</strong>—please check out the attached PDF copies below.</p>
+          <p>Best,</p>
+          <p><strong>The DevForge Onboarding Team</strong></p>
+        `;
+      }
+
+      await this.resend.emails.send({
+        from: this.from,
+        to,
+        subject: `Mutual Non-Disclosure Agreement (NDA) - ${companyName}`,
+        html: htmlContent, 
+        attachments: [
+          {
+            filename: `${companyName}-NDA.pdf`,
+            content: pdfBuffer.toString('base64'),
+          },
+        ],
+      });
+
+      this.logger.log(`NDA email sent successfully to ${to} using template: ${templateId || 'default'}`);
+    } catch (error) {
+      this.logger.error(`Failed to send NDA email to ${to}`, error as Error);
+      throw error;
+    }
+  }
 }

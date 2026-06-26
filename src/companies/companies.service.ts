@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { MAIL_SERVICE, MailService } from '../mail/mail.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
@@ -10,6 +11,8 @@ export class CompaniesService {
   constructor(
     private prisma: PrismaService,
     private supabase: SupabaseService,
+     @Inject(MAIL_SERVICE)
+  private readonly mailService: MailService,
   ) {}
 
   async list(search?: string, page = 1, pageSize = 20) {
@@ -790,5 +793,80 @@ doc.x = 55;
 
     doc.end();
     return doc;
+  }
+ async sendNda(companyId: string, customEmail?: string, templateId?: string) {
+    console.log('SEND NDA WORKFLOW INITIATED');
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      include: { vendor: true },
+    });
+
+    if (!company) {
+      throw new NotFoundException('Company profile target context not located.');
+    }
+
+    // 🎯 Use the user-verified email from the modal, fallback to db row record if empty
+    const targetRecipientEmail = customEmail || company.vendor?.email;
+
+    if (!targetRecipientEmail) {
+      throw new BadRequestException('Cannot distribute NDA agreement. Recipient destination address missing.');
+    }
+
+    // 👇 EXTRACT VALUES INTO LOCAL CONSTANTS BEFORE THE PROMISE CLOSURE
+    // This removes the reliance on the nested 'company.vendor' typing!
+    const vendorName = company.vendor?.name || 'Vendor Team';
+    const companyName = company.name;
+
+    const pdfDoc = await this.generateNdaPdf(companyId);
+    const chunks: Buffer[] = [];
+
+    return new Promise<{ success: boolean }>((resolve, reject) => {
+      pdfDoc.on('data', (chunk) => chunks.push(chunk));
+      pdfDoc.on('error', (err) => reject(err));
+
+      pdfDoc.on('end', () => {
+        const pdfBuffer = Buffer.concat(chunks);
+        
+        // ✅ USE THE CONSTANTS HERE — The red lines will be completely gone!
+        console.log('Dispatching dynamic template agreement to destination:', targetRecipientEmail);
+
+        this.mailService.sendNdaEmail(
+          targetRecipientEmail,
+          vendorName,
+          companyName,
+          pdfBuffer,
+          templateId, 
+        )
+        .then(() => {
+          console.log('NDA TEMPLATE DISTRIBUTED SUCCESSFULLY');
+          resolve({ success: true });
+        })
+        .catch((error) => {
+          console.error('MAILER SERVICE TRANSACTION ERROR:', error);
+          reject(error);
+        });
+      });
+    });
+  }
+  async saveNdaUrl(companyId: string, documentUrl: string) {
+    console.log(`SAVING EXECUTED NDA DOCUMENT FOR COMPANY ID: ${companyId}`);
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      throw new NotFoundException('Company profile context not located.');
+    }
+
+    // Update status to 'signed' and link the remote Cloudinary storage URL
+    return await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        ndaUrl: documentUrl,
+        ndaStatus: 'signed', // Updates live dynamically to swap views instantly in the UI
+      } as any,
+    });
   }
 }

@@ -14,4 +14,13 @@ export class NodemailerMailAdapter implements MailService {
     this.logger.warn(`Nodemailer adapter not configured. Would send password reset to ${to}`);
     this.logger.debug({ name, email, password });
   }
+  async sendNdaEmail(
+  to: string,
+  vendorName: string,
+  companyName: string,
+  pdfBuffer: Buffer,
+  templateId?: string,
+): Promise<void> {
+  this.logger.warn(`NDA email would be sent to ${to}`);
+}
 }
