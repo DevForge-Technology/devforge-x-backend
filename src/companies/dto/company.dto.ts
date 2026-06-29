@@ -1,3 +1,4 @@
+import { Optional } from '@nestjs/common';
 import { CompanyStatus } from '@prisma/client';
 import { IsArray, IsEnum, IsOptional, IsString, IsMongoId, IsEmail } from 'class-validator';
 
@@ -43,6 +44,7 @@ export class SendNdaDto {
   @IsEmail()
   email!: string;
 
+  @Optional()
   @IsString()
   message!: string;
 }
