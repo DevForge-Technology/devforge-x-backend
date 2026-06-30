@@ -46,29 +46,56 @@ export class ResendMailAdapter implements MailService {
       throw error;
     }
   }
-  async sendNdaEmail(
-  to: string,
-  message: string,
-  pdfBuffer: Buffer,
-): Promise<void> { console.log(message);
-  try {
-    await this.resend.emails.send({
-      from: this.from,
-      to,
-      subject: 'Mutual Non-Disclosure Agreement (NDA)',
-      html: message,
-      attachments: [
-        {
-          filename: 'NDA.pdf',
-          content: pdfBuffer.toString('base64'),
-        },
-      ],
-    });
 
-    this.logger.log(`NDA email sent successfully to ${to}`);
-  } catch (error) {
-    this.logger.error(`Failed to send NDA email to ${to}`, error as Error);
-    throw error;
+  async sendNdaEmail(
+    to: string,
+    message: string,
+    pdfBuffer: Buffer,
+  ): Promise<void> {
+    try {
+      await this.resend.emails.send({
+        from: this.from,
+        to,
+        subject: 'Mutual Non-Disclosure Agreement (NDA)',
+        html: message,
+        attachments: [
+          {
+            filename: 'NDA.pdf',
+            content: pdfBuffer.toString('base64'),
+          },
+        ],
+      });
+
+      this.logger.log(`NDA email sent successfully to ${to}`);
+    } catch (error) {
+      this.logger.error(`Failed to send NDA email to ${to}`, error as Error);
+      throw error;
+    }
   }
-}
+
+  async sendAgreementEmail(
+    to: string,
+    message: string,
+    pdfBuffer: Buffer,
+  ): Promise<void> {
+    try {
+      await this.resend.emails.send({
+        from: this.from,
+        to,
+        subject: 'Your Referral Fee Agreement Schedule',
+        html: message || '<p>Please find attached your Referral Agreement document.</p>',
+        attachments: [
+          {
+            filename: 'Referral_Agreement.pdf',
+            content: pdfBuffer.toString('base64'),
+          },
+        ],
+      });
+
+      this.logger.log(`Referral Agreement email sent successfully to ${to}`);
+    } catch (error) {
+      this.logger.error(`Failed to send Referral Agreement email to ${to}`, error as Error);
+      throw error;
+    }
+  }
 }

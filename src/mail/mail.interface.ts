@@ -18,6 +18,12 @@ export interface MailService {
   message: string,
   pdfBuffer: Buffer,
 ): Promise<void>;
+
+sendAgreementEmail(
+    to: string,
+    message: string,
+    pdfBuffer: Buffer,
+  ): Promise<void>;
 }
 export const MAIL_SERVICE = 'MAIL_SERVICE';
 

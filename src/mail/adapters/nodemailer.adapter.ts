@@ -21,4 +21,11 @@ export class NodemailerMailAdapter implements MailService {
 ): Promise<void> {
   this.logger.warn(`NDA email would be sent to ${to}`);
 }
+async sendAgreementEmail(
+    to: string,
+    message: string,
+    pdfBuffer: Buffer,
+  ): Promise<void> {
+    this.logger.warn(`Referral Agreement email would be sent to ${to}`);
+  }
 }

@@ -21,7 +21,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { CompaniesService } from './companies.service';
-import { AssignVendorDto, CreateCompanyDto, UpdateCompanyDto, UpdateWorkspaceDto, SendNdaDto } from './dto/company.dto';
+import { AssignVendorDto, CreateCompanyDto, UpdateCompanyDto, UpdateWorkspaceDto, SendNdaDto, GenerateAgreementDto } from './dto/company.dto';
 
 @Controller('companies')
 @UseGuards(AuthGuard, RolesGuard)
@@ -93,32 +93,32 @@ export class CompaniesController {
   unassign(@Param('id') id: string, @Param('vendorId') vendorId: string) {
     return this.companiesService.unassignVendor(id, vendorId);
   }
- @Post(':id/generate-nda')
-@Roles(Role.admin)
-async generateNda(
-  @Param('id') id: string,
-  @Body() dto: SendNdaDto,
-  @Res() res: Response,
-) {
-  const pdfStream = await this.companiesService.generateNdaPdf(
-    id,
-    dto.email,
-    dto.message,
-  );
 
-  res.set({
-    'Content-Type': 'application/pdf',
-    'Content-Disposition': `attachment; filename=NDA_${id}.pdf`,
-  });
+  @Post(':id/generate-nda')
+  @Roles(Role.admin)
+  async generateNda(
+    @Param('id') id: string,
+    @Body() dto: SendNdaDto,
+    @Res() res: Response,
+  ) {
+    const pdfStream = await this.companiesService.generateNdaPdf(
+      id,
+      dto.email,
+      dto.message,
+    );
 
-    // Pipe the readable stream directly into the express response network pipeline
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=NDA_${id}.pdf`,
+    });
+
     pdfStream.pipe(res);
 
-    // Pass the custom email address and selected template style into the background sender
     this.companiesService.sendNda(id, dto.email, dto.message).catch((err) => {
       console.error('Background NDA Email Delivery Failed:', err);
     });
   }
+
   @Post(':id/save-nda-url')
   async saveNdaUrl(
     @Param('id') id: string,
@@ -130,6 +130,7 @@ async generateNda(
     
     return await this.companiesService.saveNdaUrl(id, body.documentUrl);
   }
+
   @Get(':id/download-nda')
   async downloadNda(
     @Param('id') id: string,
@@ -143,5 +144,25 @@ async generateNda(
     });
 
     pdfStream.pipe(res);
+  }
+
+  @Post(':id/generate-agreement')
+  async generateAgreement(
+    @Param('id') id: string,
+    @Body() dto: GenerateAgreementDto,
+    @Res() res: Response,
+  ) {
+    const pdfStream = await this.companiesService.generateAgreementPdf(id, dto);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=Agreement_${id}.pdf`,
+    });
+
+    pdfStream.pipe(res);
+
+    this.companiesService.sendAgreement(id, dto.email, dto.message || '', dto).catch((err) => {
+      console.error('Background Agreement Email Delivery Failed:', err);
+    });
   }
 }
