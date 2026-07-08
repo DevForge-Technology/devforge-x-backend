@@ -143,12 +143,8 @@ export class CompaniesController {
   @Patch(':id/approve-nda')
   @Roles(Role.admin)
   async approveNda(@Param('id') id: string) {
-    return await this.reportsService.createReport({
-      companyId: id,
-      type: 'NDA',
-      status: 'signed',
-      fileName: 'Approved NDA',
-    });
+    await this.companiesService.approveNda(id);
+    return await this.reportsService.approveNdaReport(id);
   }
 
   @Get(':id/download-nda')
