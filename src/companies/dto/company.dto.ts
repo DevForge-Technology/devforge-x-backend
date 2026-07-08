@@ -116,3 +116,4 @@ export class GenerateAgreementDto {
   @IsString()
   bsbAccount?: string;
 }
+

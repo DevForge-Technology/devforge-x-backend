@@ -10,6 +10,7 @@ import { MailModule } from '../mail/mail.module';
   imports: [MailModule],
   controllers: [ReportsController],
   providers: [ReportsService, CloudinaryService, AuthGuard, RolesGuard],
+  exports: [ReportsService],
 })
 export class ReportsModule {}
 

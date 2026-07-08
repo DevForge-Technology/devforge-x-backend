@@ -32,6 +32,7 @@ export class ReportsController {
     @CurrentUser() user: User,
     @Param('companyId') companyId: string,
     @UploadedFile() file: any,
+    @Body('type') type: 'GENERAL' | 'NDA' = 'GENERAL',
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
@@ -42,7 +43,7 @@ export class ReportsController {
       throw new BadRequestException('Only PDF, DOC, and DOCX files are allowed');
     }
 
-    return this.reportsService.uploadReport(user.id, companyId, file);
+    return this.reportsService.uploadReport(user.id, companyId, file, type);
   }
 
   @Get('company/:companyId')
@@ -51,24 +52,26 @@ export class ReportsController {
     @Param('companyId') companyId: string,
     @Query('page') page?: string,
     @Query('page_size') pageSize?: string,
+    @Query('type') type?: 'GENERAL' | 'NDA',
   ) {
     return this.reportsService.getCompanyReports(
       user.id,
       user.role,
       companyId,
+      type,
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 10,
     );
   }
+  @Get('nda/:companyId')
+@Roles(Role.vendor)
+async getPendingNdaReports(@Param('companyId') companyId: string) {
+  return this.reportsService.getPendingNdaReports(companyId);
+}
 
   @Delete(':id')
   @Roles(Role.vendor)
   async deleteReport(@CurrentUser() user: User, @Param('id') id: string) {
     return this.reportsService.deleteReport(user.id, id);
   }
-
-
 }
-
-
-

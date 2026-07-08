@@ -1,6 +1,11 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { ReportType } from '@prisma/client';
 
-export class UploadReportDto {}
+export class UploadReportDto {
+  @IsEnum(ReportType)
+  @IsOptional()
+  type?: ReportType;
+}
 
 export class SendReportDto {
   @IsString()
@@ -16,6 +21,8 @@ export class SendReportDto {
 
 export class ReportResponseDto {
   id!: string;
+  type!: ReportType;
+  status!: string;
   fileUrl!: string;
   fileName!: string;
   fileType!: string;
@@ -27,7 +34,3 @@ export class ReportResponseDto {
   createdAt!: Date;
   updatedAt!: Date;
 }
-
-
-
-

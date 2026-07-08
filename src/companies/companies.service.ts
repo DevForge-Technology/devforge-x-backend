@@ -146,6 +146,22 @@ export class CompaniesService {
 
     return { user };
   }
+  async approveNda(id: string) {
+  const company = await this.prisma.company.findUnique({
+    where: { id },
+  });
+
+  if (!company) {
+    throw new NotFoundException('Company not found');
+  }
+
+  return this.prisma.company.update({
+    where: { id },
+    data: {
+      ndaStatus: 'signed',
+    },
+  });
+}
 
   async generateNdaPdf(
   companyId: string,
@@ -843,10 +859,18 @@ const targetRecipientEmail = email || company.vendor?.email;
   message,
   pdfBuffer,
 )
-        .then(() => {
-          console.log('NDA TEMPLATE DISTRIBUTED SUCCESSFULLY');
-          resolve({ success: true });
-        })
+        .then(async () => {
+  await this.prisma.company.update({
+    where: { id: companyId },
+    data: {
+      ndaSentAt: new Date(),
+      ndaStatus: 'pending',
+    },
+  });
+
+  console.log('NDA TEMPLATE DISTRIBUTED SUCCESSFULLY');
+  resolve({ success: true });
+})
         .catch((error) => {
           console.error('MAILER SERVICE TRANSACTION ERROR:', error);
           reject(error);

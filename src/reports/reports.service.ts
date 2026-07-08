@@ -1,7 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../common/services/cloudinary.service';
-import { UploadReportDto } from './dto/report.dto';
 import { MailService } from '../mail/mail.service';
 
 @Injectable()
@@ -12,10 +11,44 @@ export class ReportsService {
     private mailService: MailService,
   ) {}
 
+  async createReport(data: { 
+  companyId: string, 
+  vendorId?: string | null, 
+  type: 'GENERAL' | 'NDA', 
+  status: 'pending' | 'uploaded' | 'signed' | 'rejected', 
+  fileName: string 
+}) {
+  return await this.prisma.report.create({
+    data: {
+      companyId: data.companyId,
+      vendorId: data.vendorId || '', 
+      type: data.type,
+      status: data.status,
+      fileName: data.fileName,
+      fileUrl: '',
+      filePublicId: '',
+      fileSize: 0,
+      fileType: 'application/pdf',
+    },
+  });
+}
+
+async getPendingNdaReports(companyId: string) {
+  return await this.prisma.report.findMany({
+    where: {
+      companyId: companyId,
+      type: 'NDA',
+      status: 'pending',
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
   async uploadReport(
     vendorId: string,
     companyId: string,
     file: any,
+    type: 'GENERAL' | 'NDA' = 'GENERAL'
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
@@ -45,13 +78,15 @@ export class ReportsService {
         fileSize: file.size,
         vendorId,
         companyId,
+        type: type,
+        status: type === 'NDA' ? 'uploaded' : undefined,
       },
     });
 
     return report;
   }
 
-  async getCompanyReports(userId: string, userRole: string, companyId: string, page = 1, pageSize = 10) {
+  async getCompanyReports(userId: string, userRole: string, companyId: string, type?: 'GENERAL' | 'NDA', page = 1, pageSize = 10) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
     });
@@ -60,15 +95,18 @@ export class ReportsService {
       throw new NotFoundException('Company not found');
     }
 
-    // Admins can see all reports, vendors can only see reports from companies they own
     if (userRole === 'vendor' && company.vendorId !== userId) {
       throw new BadRequestException('Vendor does not own this company');
     }
 
     const skip = (page - 1) * pageSize;
-    const whereClause = userRole === 'admin'
+    const whereClause: any = userRole === 'admin'
       ? { companyId }
       : { companyId, vendorId: userId };
+
+    if (type) {
+      whereClause.type = type;
+    }
 
     const [reports, total] = await Promise.all([
       this.prisma.report.findMany({
@@ -106,14 +144,14 @@ export class ReportsService {
       throw new BadRequestException('Vendor does not own this report');
     }
 
+    if (report.filePublicId) {
     await this.cloudinaryService.deleteFile(report.filePublicId);
+  }
 
     return this.prisma.report.delete({
       where: { id: reportId },
     });
   }
-
-
 
   async deleteCompanyReports(companyId: string) {
     const reports = await this.prisma.report.findMany({
@@ -121,7 +159,9 @@ export class ReportsService {
     });
 
     for (const report of reports) {
+      if (report.filePublicId) {
       await this.cloudinaryService.deleteFile(report.filePublicId);
+    }
     }
 
     return this.prisma.report.deleteMany({
@@ -129,7 +169,3 @@ export class ReportsService {
     });
   }
 }
-
-
-
-
