@@ -12,6 +12,19 @@ export interface MailService {
     email: string,
     password: string,
   ): Promise<void>;
-}
 
+ sendNdaEmail(
+  to: string,
+  message: string,
+  pdfBuffer: Buffer,
+): Promise<void>;
+
+sendAgreementEmail(
+    to: string,
+    message: string,
+    pdfBuffer: Buffer,
+  ): Promise<void>;
+}
 export const MAIL_SERVICE = 'MAIL_SERVICE';
+
+

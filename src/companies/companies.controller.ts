@@ -11,6 +11,7 @@ import {
   Req,
   Res,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Role } from '@prisma/client';
@@ -20,12 +21,13 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { CompaniesService } from './companies.service';
-import { AssignVendorDto, CreateCompanyDto, UpdateCompanyDto, UpdateWorkspaceDto } from './dto/company.dto';
+import { ReportsService } from '../reports/reports.service';
+import { AssignVendorDto, CreateCompanyDto, UpdateCompanyDto, UpdateWorkspaceDto, SendNdaDto, GenerateAgreementDto } from './dto/company.dto';
 
 @Controller('companies')
 @UseGuards(AuthGuard, RolesGuard)
 export class CompaniesController {
-  constructor(private companiesService: CompaniesService) {}
+  constructor(private companiesService: CompaniesService, private reportsService: ReportsService) {}
 
   @Get('mine')
   @Roles(Role.vendor)
@@ -92,18 +94,83 @@ export class CompaniesController {
   unassign(@Param('id') id: string, @Param('vendorId') vendorId: string) {
     return this.companiesService.unassignVendor(id, vendorId);
   }
+
   @Post(':id/generate-nda')
   @Roles(Role.admin)
-  async generateNda(@Param('id') id: string, @Res() res: Response) {
-    const pdfStream = await this.companiesService.generateNdaPdf(id);
+  async generateNda(
+    @Param('id') id: string,
+    @Body() dto: SendNdaDto,
+    @Res() res: Response,
+  ) {
+    const company = await this.companiesService.getById(id);
+    const pdfStream = await this.companiesService.generateNdaPdf(id, dto.email, dto.message);
 
-    // Set headers explicitly to tell the browser it's a binary PDF download
+    await this.reportsService.createReport({
+      companyId: id,
+      vendorId: company.vendorId,
+      type: 'NDA',
+      status: 'pending',
+      fileName: `NDA_${id}.pdf`,
+    });
+
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename=NDA_${id}.pdf`,
     });
-
-    // Pipe the readable stream directly into the express response network pipeline
     pdfStream.pipe(res);
+
+    this.companiesService.sendNda(id, dto.email, dto.message).catch((err) => {
+      console.error('Background NDA Email Delivery Failed:', err);
+    });
+  }
+
+  @Post(':id/save-nda-url')
+  async saveNdaUrl(
+    @Param('id') id: string,
+    @Body() body: { documentUrl: string },
+  ) {
+    if (!body.documentUrl) {
+      throw new BadRequestException('Document payload parameter source is missing.');
+    }
+    return await this.reportsService.createReport({
+      companyId: id,
+      type: 'NDA',
+      status: 'uploaded',
+      fileName: 'Uploaded NDA',
+    });
+  }
+
+  @Patch(':id/approve-nda')
+  @Roles(Role.admin)
+  async approveNda(@Param('id') id: string) {
+    await this.companiesService.approveNda(id);
+    return await this.reportsService.approveNdaReport(id);
+  }
+
+  @Get(':id/download-nda')
+  async downloadNda(@Param('id') id: string, @Res() res: Response) {
+    const pdfStream = await this.companiesService.generateNdaPdf(id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=NDA_Executed_${id}.pdf`,
+    });
+    pdfStream.pipe(res);
+  }
+
+  @Post(':id/generate-agreement')
+  async generateAgreement(
+    @Param('id') id: string,
+    @Body() dto: GenerateAgreementDto,
+    @Res() res: Response,
+  ) {
+    const pdfStream = await this.companiesService.generateAgreementPdf(id, dto);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=Agreement_${id}.pdf`,
+    });
+    pdfStream.pipe(res);
+    this.companiesService.sendAgreement(id, dto.email, dto.message || '', dto).catch((err) => {
+      console.error('Background Agreement Failed:', err);
+    });
   }
 }

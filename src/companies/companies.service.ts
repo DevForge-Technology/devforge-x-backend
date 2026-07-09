@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { MAIL_SERVICE, MailService } from '../mail/mail.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
@@ -10,6 +11,8 @@ export class CompaniesService {
   constructor(
     private prisma: PrismaService,
     private supabase: SupabaseService,
+     @Inject(MAIL_SERVICE)
+  private readonly mailService: MailService,
   ) {}
 
   async list(search?: string, page = 1, pageSize = 20) {
@@ -143,8 +146,28 @@ export class CompaniesService {
 
     return { user };
   }
+  async approveNda(id: string) {
+  const company = await this.prisma.company.findUnique({
+    where: { id },
+  });
 
-  async generateNdaPdf(companyId: string): Promise<NodeJS.ReadableStream> {
+  if (!company) {
+    throw new NotFoundException('Company not found');
+  }
+
+  return this.prisma.company.update({
+    where: { id },
+    data: {
+      ndaStatus: 'signed',
+    },
+  });
+}
+
+  async generateNdaPdf(
+  companyId: string,
+  email?: string,
+  message?: string,
+): Promise<NodeJS.ReadableStream> {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       include: { vendor: true },
@@ -791,4 +814,369 @@ doc.x = 55;
     doc.end();
     return doc;
   }
+ async sendNda(
+  companyId: string,
+  email: string,
+  message: string,
+) {
+    console.log('SEND NDA WORKFLOW INITIATED');
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      include: { vendor: true },
+    });
+
+    if (!company) {
+      throw new NotFoundException('Company profile target context not located.');
+    }
+const targetRecipientEmail = email || company.vendor?.email;
+
+    if (!targetRecipientEmail) {
+      throw new BadRequestException('Cannot distribute NDA agreement. Recipient destination address missing.');
+    }
+
+    const vendorName = company.vendor?.name || 'Vendor Team';
+    const companyName = company.name;
+
+    const pdfDoc = await this.generateNdaPdf(
+  companyId,
+  targetRecipientEmail,
+  message,
+);
+    const chunks: Buffer[] = [];
+
+    return new Promise<{ success: boolean }>((resolve, reject) => {
+      pdfDoc.on('data', (chunk) => chunks.push(chunk));
+      pdfDoc.on('error', (err) => reject(err));
+
+      pdfDoc.on('end', () => {
+        const pdfBuffer = Buffer.concat(chunks);
+    
+        console.log('Dispatching dynamic template agreement to destination:', targetRecipientEmail);
+
+        this.mailService.sendNdaEmail(
+  targetRecipientEmail,
+  message,
+  pdfBuffer,
+)
+        .then(async () => {
+  await this.prisma.company.update({
+    where: { id: companyId },
+    data: {
+      ndaSentAt: new Date(),
+      ndaStatus: 'pending',
+    },
+  });
+
+  console.log('NDA TEMPLATE DISTRIBUTED SUCCESSFULLY');
+  resolve({ success: true });
+})
+        .catch((error) => {
+          console.error('MAILER SERVICE TRANSACTION ERROR:', error);
+          reject(error);
+        });
+      });
+    });
+  }
+  async saveNdaUrl(companyId: string, documentUrl: string) {
+    console.log(`SAVING EXECUTED NDA DOCUMENT FOR COMPANY ID: ${companyId}`);
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      throw new NotFoundException('Company profile context not located.');
+    }
+
+    // Update status to 'signed' and link the remote Cloudinary storage URL
+    return await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        ndaUrl: documentUrl,
+        ndaStatus: 'signed', 
+      } as any,
+    });
+  }
+  async sendAgreement(
+    companyId: string,
+    email: string,
+    message: string,
+    dto: any,
+  ) {
+    console.log('SEND AGREEMENT WORKFLOW INITIATED');
+    console.log(companyId);
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      include: { vendor: true },
+    });
+
+    if (!company) {
+      throw new NotFoundException('Company profile target context not located.');
+    }
+
+    const targetRecipientEmail = email || company.vendor?.email;
+
+    if (!targetRecipientEmail) {
+      throw new BadRequestException('Cannot distribute agreement. Recipient destination address missing.');
+    }
+
+    const pdfDoc = await this.generateAgreementPdf(companyId, dto);
+    const chunks: Buffer[] = [];
+
+    return new Promise<{ success: boolean; buffer: Buffer }>((resolve, reject) => {
+      pdfDoc.on('data', (chunk: any) => chunks.push(chunk));
+      pdfDoc.on('error', (err: any) => reject(err));
+
+      pdfDoc.on('end', () => {
+        const pdfBuffer = Buffer.concat(chunks);
+        
+        console.log('Dispatching Referral Agreement to destination:', targetRecipientEmail);
+
+        this.mailService.sendAgreementEmail(
+          targetRecipientEmail,
+          message || 'Please find attached your Referral Agreement.',
+          pdfBuffer
+        )
+        .then(() => {
+          console.log('AGREEMENT TEMPLATE DISTRIBUTED SUCCESSFULLY');
+          resolve({ success: true, buffer: pdfBuffer });
+        })
+        .catch((error) => {
+          console.error('MAILER SERVICE TRANSACTION ERROR:', error);
+          reject(error);
+        });
+      });
+    });
+  }
+ async generateAgreementPdf(companyId: string, dto: any): Promise<NodeJS.ReadableStream> {
+  const company = await this.prisma.company.findUnique({ where: { id: companyId }, include: { vendor: true } });
+  if (!company) throw new NotFoundException('Company parameters not found');
+
+  const clientName = company.name || '[Client Company]', vendorName = company.vendor?.name || '[Representative]', designation = company.vendor?.designation || 'Director';
+  const effectiveDate = dto.scheduleDate || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 65, left: 55, right: 55 }, bufferPages: true });
+  doc.registerFont('Inter', path.join(process.cwd(), 'assets/fonts/Inter-Regular.ttf'));
+  doc.registerFont('InterBold', path.join(process.cwd(), 'assets/fonts/Inter-Bold.ttf'));
+  doc.registerFont('InterSemiBold', path.join(process.cwd(), 'assets/fonts/Inter-SemiBold.ttf'));
+  doc.registerFont('InterItalic', path.join(process.cwd(), 'assets/fonts/Inter-Italic.ttf'));
+  doc.lineGap(3);
+
+  const PRIMARY = '#00bdbe';       
+  const TEXT = '#2c3e50';          
+  const MUTED = '#6b7280';         
+  const TABLE_BG_LEFT = '#effaf9'; 
+  const TABLE_BORDER = '#d0e8e6';  
+
+  doc.y = 48;
+
+  doc.fillColor('#0f172a').font('InterBold').fontSize(18).text('Referral Fee Schedule', { align: 'left' });
+  doc.moveDown(0.1);
+
+  doc.fillColor(TEXT).font('Inter').fontSize(9.5).text('Schedule No.: ', { continued: true });
+  doc.text(dto.scheduleNo || '____________');
+  doc.moveDown(1);
+
+  doc.fillColor(TEXT).font('Inter').fontSize(10.5);
+  doc.text('Per the Strategic Partnership Agreement between ', { continued: true });
+  doc.font('InterBold').text('DevForge Technology ', { continued: true });
+  doc.font('Inter').text('and ', { continued: true });
+  doc.font('InterBold').text(`${clientName}`, { continued: true });
+  doc.font('Inter').text(`, dated ${effectiveDate} ("the Agreement"). This Schedule records a Referred Client introduced by ${clientName} to DevForge under `, { continued: true });
+  doc.font('InterBold').text('Model A (Straight Referral) ', { continued: true });
+  doc.font('Inter').text(`and the Referral Fee payable by DevForge to ${clientName}. `, { continued: true });
+  doc.text('Capitalised terms have the meaning given in the Agreement.', { align: 'left' });
+  doc.moveDown(1.5);
+
+  const sectionTitle = (number: string, title: string) => {
+    if (doc.y + 40 > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+    doc.fillColor(PRIMARY).font('InterBold').fontSize(12).text(`${number} `, { continued: true });
+    doc.fillColor('#0f172a').font('InterBold').fontSize(12).text(`   ${title}`);
+    doc.moveDown(.25);
+    doc.strokeColor(PRIMARY).lineWidth(1.2).moveTo(55, doc.y).lineTo(doc.page.width - 55, doc.y).stroke();
+    doc.moveDown(.8);
+  };
+
+  const drawTable = (rows: Array<[string, any]>) => {
+    const tableX = 55, tableWidth = doc.page.width - 110, leftWidth = 210, rightWidth = tableWidth - leftWidth;
+    const leftPadding = 10, rightPadding = 10;
+    let currentY = doc.y;
+
+    rows.forEach(([label, value]) => {
+      const labelText = label || '', valueText = value === null || value === undefined ? '' : String(value);
+      
+      doc.font('InterSemiBold').fontSize(10);
+      const leftTextHeight = doc.heightOfString(labelText, { width: leftWidth - (leftPadding * 2), align: 'left' });
+      
+      doc.font('Inter').fontSize(10);
+      const rightTextHeight = doc.heightOfString(valueText, { width: rightWidth - (rightPadding * 2), align: 'left' });
+      
+      const rowHeight = Math.max(leftTextHeight, rightTextHeight) + 6;
+
+      if (currentY + rowHeight > doc.page.height - 65) { doc.addPage(); currentY = 48; }
+      
+      doc.save().rect(tableX, currentY, leftWidth, rowHeight).fill(TABLE_BG_LEFT).restore();
+      doc.save().rect(tableX + leftWidth, currentY, rightWidth, rowHeight).fill('#ffffff').restore();
+      
+      doc.rect(tableX, currentY, tableWidth, rowHeight).lineWidth(0.8).strokeColor(TABLE_BORDER).stroke();
+      doc.moveTo(tableX + leftWidth, currentY).lineTo(tableX + leftWidth, currentY + rowHeight).lineWidth(0.8).strokeColor(TABLE_BORDER).stroke();
+      
+      doc.font('InterSemiBold').fontSize(10).fillColor('#1e293b').text(labelText, tableX + leftPadding, currentY + 3, { width: leftWidth - (leftPadding * 2), align: 'left' });
+      doc.font('Inter').fontSize(10).fillColor('#334155').text(valueText, tableX + leftWidth + rightPadding, currentY + 3, { width: rightWidth - (rightPadding * 2), align: 'left' });
+      
+      currentY += rowHeight;
+    });
+    doc.y = currentY + 10; doc.x = 55;
+  };
+
+  sectionTitle('1', 'Engagement details');
+  drawTable([
+    ['Referral Schedule date', dto.scheduleDate || effectiveDate],
+    ['Referred Client (legal entity)', dto.referredClient],
+    ['Engagement / project name', dto.engagementName],
+    ['Scope summary', dto.scopeSummary],
+    ['Total Client contract value (AUD)', dto.totalClientContractValue ? `$${dto.totalClientContractValue}` : ''],
+    ['Number of Client progress payments', dto.numberOfProgressPayments],
+    ['Expected engagement start', dto.expectedEngagementStart],
+  ]);
+  doc.moveDown(.8);
+
+  sectionTitle('2', 'Referral Fee');
+  drawTable([
+    ['Total Referral Fee (AUD)', dto.totalReferralFee ? `$${Number(dto.totalReferralFee).toLocaleString()}` : ''],
+    ['Number of instalments', dto.numberOfInstalments],
+    ['Instalment amount (AUD)', dto.instalmentAmount ? `$${Number(dto.instalmentAmount).toLocaleString()} per instalment` : ''],
+  ]);
+
+  doc.fillColor(MUTED).font('InterItalic').fontSize(9.5).text('The Referral Fee is the total amount payable by DevForge to AI Collab.', { align: 'left' });
+  doc.moveDown(1.4);
+
+  sectionTitle('3', 'Payment mechanism');
+  if (doc.y + 40 > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+  doc.fillColor(PRIMARY).font('InterBold').fontSize(10.5).text('3.1', { continued: true });
+  doc.fillColor(TEXT).font('InterBold').text('   DevForge contracts and invoices the Referred Client directly. ', { continued: true });
+  doc.font('Inter').text(`${clientName} is not a party to the Client contract and carries no delivery, payment or warranty obligation to the Client.`, { align: 'left' });
+  doc.moveDown(.8);
+
+  if (doc.y + 40 > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+  doc.fillColor(PRIMARY).font('InterBold').fontSize(10.5).text('3.2', { continued: true });
+  doc.fillColor(TEXT).font('Inter').text(`   DevForge shall pay ${clientName} one instalment of the Referral Fee for `, { continued: true });
+  doc.font('InterBold').text('each Client progress payment DevForge receives', { continued: true });
+  doc.font('Inter').text(', in the amount set out in Section 2.', { align: 'left' });
+  doc.moveDown(.8);
+
+  if (doc.y + 40 > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+  doc.fillColor(PRIMARY).font('InterBold').fontSize(10.5).text('3.3', { continued: true });
+  doc.fillColor(TEXT).font('Inter').text('   Each instalment is due within ', { continued: true });
+  doc.font('InterBold').text('5 Business Days ', { continued: true });
+  doc.font('Inter').text('of DevForge receiving the corresponding Client payment in cleared funds.', { align: 'left' });
+  doc.moveDown(.8);
+
+  if (doc.y + 40 > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+  doc.fillColor(PRIMARY).font('InterBold').fontSize(10.5).text('3.4', { continued: true });
+  doc.fillColor(TEXT).font('Inter').text(`   DevForge shall notify ${clientName} in writing within `, { continued: true });
+  doc.font('InterBold').text('2 Business Days ', { continued: true });
+  doc.font('Inter').text('of receiving each Client payment, and shall provide reasonable evidence of the amount and date received on request.', { align: 'left' });
+  doc.moveDown(.8);
+
+  if (doc.y + 40 > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+  doc.fillColor(PRIMARY).font('InterBold').fontSize(10.5).text('3.5', { continued: true });
+  doc.fillColor(TEXT).font('Inter').text('   If the Engagement is ', { continued: true });
+  doc.font('InterBold').text('varied, paused or terminated', { continued: true });
+  doc.font('Inter').text(', the Referral Fee is payable only in proportion to the Client progress payments actually received by DevForge. No instalment is payable in respect of a Client payment that is not received.', { align: 'left' });
+  doc.moveDown(.8);
+
+  if (doc.y + 40 > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+  doc.fillColor(PRIMARY).font('InterBold').fontSize(10.5).text('3.6', { continued: true });
+  doc.fillColor(TEXT).font('Inter').text('   Referral Fee instalments are payable by electronic transfer to:', { align: 'left' });
+  doc.moveDown(.5);
+
+  const boxX = 55, boxWidth = doc.page.width - 110, boxHeight = 44;
+  if (doc.y + boxHeight > doc.page.height - 65) { doc.addPage(); doc.y = 48; }
+  
+  const currentBoxY = doc.y;
+  doc.save().rect(boxX, currentBoxY, boxWidth, boxHeight).fill(TABLE_BG_LEFT).restore();
+  doc.rect(boxX, currentBoxY, boxWidth, boxHeight).lineWidth(0.8).strokeColor(TABLE_BORDER).stroke();
+
+  doc.font('InterBold').fontSize(10).fillColor('#1e293b').text('Account name: ', boxX + 12, currentBoxY + 8, { continued: true });
+  doc.font('Inter').fillColor('#334155').text(dto.accountName || '');
+  
+  doc.font('InterBold').fontSize(10).fillColor('#1e293b').text('BSB / Account: ', boxX + 12, currentBoxY + 24, { continued: true });
+  doc.font('Inter').fillColor('#334155').text(dto.bsbAccount || '');
+  
+  doc.y = currentBoxY + boxHeight + 15;
+  doc.x = 55;
+
+  sectionTitle('4', 'Referral arrangement');
+  doc.fillColor(TEXT).font('Inter').fontSize(10.5).text('Under the Agreement dated ', { continued: true });
+  doc.font('InterBold').text(effectiveDate, { continued: true });
+  doc.font('Inter').text(', this is a client referral. DevForge holds the Client relationship and bears all warranties, liability and obligations to the Client. ', { continued: true });
+  doc.font('InterBold').text(`${clientName}'s entitlement`, { continued: true });
+  doc.font('Inter').text(' under this Schedule is limited solely to the Referral Fee described in Section 2.', { align: 'left' });
+  doc.moveDown(2.5);
+
+  const signatureHeight = 160;
+  if (doc.y + signatureHeight > doc.page.height - 65) doc.addPage();
+
+  const drawSignatureBlock = (titleText: string, signerName: string, signerTitle: string) => {
+    doc.font('InterBold').fontSize(11).fillColor('#0f2537').text(titleText);
+    doc.moveDown(4);
+    
+    const startY = doc.y, colW = 155, gap = 8;
+    doc.strokeColor('#8c8c8c').lineWidth(0.6);
+    doc.moveTo(55, startY).lineTo(55 + colW, startY).stroke();
+    doc.moveTo(55 + colW + gap, startY).lineTo(55 + (colW * 2) + gap, startY).stroke();
+    doc.moveTo(55 + (colW * 2) + (gap * 2), startY).lineTo(doc.page.width - 55, startY).stroke();
+
+    doc.font('InterBold').fontSize(9.5).fillColor(TEXT);
+    doc.text(signerName, 55, startY - 14, { width: colW });
+    doc.text(signerTitle, 55 + colW + gap, startY - 14, { width: colW });
+    doc.text(effectiveDate, 55 + (colW * 2) + (gap * 2), startY - 14, { width: colW });
+
+    doc.font('Inter').fontSize(8).fillColor(MUTED);
+    doc.text('Name', 55, startY + 4);
+    doc.text('Title', 55 + colW + gap, startY + 4);
+    doc.text('Date', 55 + (colW * 2) + (gap * 2), startY + 4);
+    
+    doc.x = 55; doc.moveDown(2.5);
+  };
+
+  drawSignatureBlock('Signed for DevForge Technology', 'Vikram Modh', 'Director & CEO');
+  drawSignatureBlock(`Signed for ${clientName}`, vendorName, designation);
+
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(i);
+    const pageWidth = doc.page.width, pageHeight = doc.page.height;
+    
+    doc.font('InterBold').fontSize(13).fillColor('#1e293b').text(clientName, 55, 22);
+    
+    const companyWidth = doc.widthOfString(clientName);
+    
+    doc.font('Inter').fontSize(9.5).fillColor('#64748b').text('  ·  Referral Fee Schedule - Agreed Form', 55 + companyWidth, 25.5);
+    
+    doc.strokeColor(PRIMARY).lineWidth(2).moveTo(55, 42).lineTo(pageWidth - 55, 42).stroke();
+
+    const originalBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+
+    const footerLineY = pageHeight - 48;
+    doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(55, footerLineY).lineTo(pageWidth - 55, footerLineY).stroke();
+
+    doc.font('Inter').fontSize(7).fillColor('#777777');
+    const footerTextY = pageHeight - 35;
+
+    doc.text(`${clientName} · Lake Macquarie, NSW, Australia · CONFIDENTIAL`, 55, footerTextY, {
+      width: pageWidth - 110,
+      align: 'center',
+    });
+
+    doc.page.margins.bottom = originalBottomMargin;
+  }
+
+  doc.end();
+  return doc;
+}
 }

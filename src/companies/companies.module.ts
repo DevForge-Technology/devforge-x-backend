@@ -3,8 +3,11 @@ import { CompaniesController } from './companies.controller';
 import { CompaniesService } from './companies.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { MailModule } from '../mail/mail.module';
+import { ReportsModule } from 'src/reports/reports.module';
 
 @Module({
+  imports: [MailModule, ReportsModule],
   controllers: [CompaniesController],
   providers: [CompaniesService, AuthGuard, RolesGuard],
 })
